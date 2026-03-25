@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Question Display</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #1a1520;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+    }
+
+    .reel-container {
+      aspect-ratio: 9 / 16;
+      max-height: 100vh;
+      width: auto;
+      position: relative;
+      background: linear-gradient(135deg, #2E0A4C 0%, #1B1B2F 100%);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .timer {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+    .timer svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+    .timer-bg {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.15);
+      stroke-width: 3;
+    }
+    .timer-progress {
+      fill: none;
+      stroke: #9B59B6;
+      stroke-width: 3;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.2s linear;
+    }
+    .timer-text {
+      position: absolute;
+      font-size: 12px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .question-card {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 56px 24px 32px;
+      justify-content: center;
+    }
+    .question-card.fade-in {
+      animation: fadeIn 0.3s ease forwards;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .question-text {
+      font-size: clamp(28px, 5vw, 42px);
+      font-weight: 500;
+      color: #fff;
+      margin: 0 0 32px;
+      text-align: center;
+      line-height: 1.35;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    }
+
+    .options {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .options li {
+      font-size: clamp(22px, 3.5vw, 32px);
+      color: #fff;
+      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    }
+    .option-letter {
+      color: #9B59B6;
+      font-weight: 500;
+      margin-right: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="reel-container">
+    <div class="timer" aria-label="20 seconds">
+      <svg viewBox="0 0 40 40">
+        <circle class="timer-bg" cx="20" cy="20" r="17" />
+        <circle class="timer-progress" id="timer-progress" cx="20" cy="20" r="17"
+          stroke-dasharray="106.8" stroke-dashoffset="0" />
+      </svg>
+      <span class="timer-text" id="timer-text">20</span>
+    </div>
+    <div class="question-card fade-in" id="question-card">
+      <p class="question-text" id="question-text">What does git branch -m do?</p>
+      <ul class="options" id="options">
+        <li><span class="option-letter">A</span> — Branch rename</li>
+        <li><span class="option-letter">B</span> — Repo delete</li>
+        <li><span class="option-letter">C</span> — Updates lana</li>
+        <li><span class="option-letter">D</span> — Code freeze</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    const QUESTIONS = [
+      {
+        text: 'What does git branch -m do?',
+        options: ['Branch rename', 'Repo delete', 'Updates lana', 'Code freeze']
+      },
+      {
+        text: 'Which command shows uncommitted changes?',
+        options: ['git status', 'git log', 'git diff', 'git show']
+      },
+      {
+        text: 'What does git stash do?',
+        options: ['Deletes all commits', 'Saves work in progress', 'Creates a branch', 'Pushes to remote']
+      }
+    ];
+
+    const DISPLAY_DURATION_MS = 4500;
+    const TIMER_SECONDS = 20;
+    const CIRCUMFERENCE = 2 * Math.PI * 17;
+
+    let currentIndex = 0;
+    let timerInterval = null;
+    let cycleInterval = null;
+
+    function renderQuestion(index) {
+      const q = QUESTIONS[index];
+      const card = document.getElementById('question-card');
+      card.style.opacity = '0';
+      card.classList.remove('fade-in');
+      card.offsetHeight;
+      card.classList.add('fade-in');
+
+      document.getElementById('question-text').textContent = q.text;
+      const optionsEl = document.getElementById('options');
+      optionsEl.innerHTML = '';
+      const letters = ['A', 'B', 'C', 'D'];
+      q.options.forEach((opt, i) => {
+        const li = document.createElement('li');
+        li.innerHTML = '<span class="option-letter">' + letters[i] + '</span> — ' + opt;
+        optionsEl.appendChild(li);
+      });
+    }
+
+    function startTimer() {
+      let remaining = TIMER_SECONDS;
+      const progressEl = document.getElementById('timer-progress');
+      const textEl = document.getElementById('timer-text');
+      const maxOffset = CIRCUMFERENCE;
+
+      if (timerInterval) clearInterval(timerInterval);
+      progressEl.style.strokeDashoffset = '0';
+      textEl.textContent = String(remaining);
+
+      timerInterval = setInterval(() => {
+        remaining--;
+        if (remaining < 0) {
+          clearInterval(timerInterval);
+          remaining = TIMER_SECONDS;
+          startTimer();
+          return;
+        }
+        const pct = remaining / TIMER_SECONDS;
+        progressEl.style.strokeDashoffset = String(maxOffset * (1 - pct));
+        textEl.textContent = String(remaining);
+      }, 1000);
+    }
+
+    function cycleQuestions() {
+      renderQuestion(currentIndex);
+      startTimer();
+      currentIndex = (currentIndex + 1) % QUESTIONS.length;
+      if (cycleInterval) clearInterval(cycleInterval);
+      cycleInterval = setInterval(() => {
+        renderQuestion(currentIndex);
+        startTimer();
+        currentIndex = (currentIndex + 1) % QUESTIONS.length;
+      }, DISPLAY_DURATION_MS);
+    }
+
+    renderQuestion(0);
+    startTimer();
+    cycleQuestions();
+  </script>
+</body>
+</html>

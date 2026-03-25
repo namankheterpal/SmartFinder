@@ -1,0 +1,9 @@
+{
+  "name": "path-opener",
+  "version": "1.0.0",
+  "description": "Webpage to open paths in Mac Finder",
+  "main": "server.js",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}

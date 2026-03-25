@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Path Analyzer</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      background: #1a1a1a;
+      color: #e0e0e0;
+    }
+    .tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+    .tab { padding: 8px 16px; border: none; border-radius: 6px; background: #2a2a2a; color: #ccc; cursor: pointer; }
+    .tab:hover { background: #333; color: #fff; }
+    .tab.active { background: #4a7c59; color: #fff; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .tree-tool-btn { padding: 8px 16px; border: none; border-radius: 6px; background: #2a2a2a; color: #ccc; cursor: pointer; }
+    .tree-tool-btn:hover { background: #333; color: #fff; }
+    .filter-row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+    .filter-row label { display: flex; align-items: center; gap: 6px; }
+    .filter-row input { padding: 6px 10px; border-radius: 4px; border: 1px solid #444; background: #2a2a2a; color: #e0e0e0; min-width: 200px; }
+    .app-layout { display: flex; min-height: 100vh; }
+    .app-main { flex: 1; min-width: 0; padding: 16px 24px; }
+    .path-row-wrap { padding: 6px 10px; border-radius: 6px; font-family: ui-monospace, monospace; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .path-row-wrap:hover { background: #2a2a2a; }
+    .path-row-wrap .path-row-text { flex: 1; min-width: 0; }
+    .path-row-wrap .add-to-cart, .path-row-wrap .verify-btn, .path-row-wrap .copy-btn { opacity: 0; flex-shrink: 0; cursor: pointer; color: #888; padding: 2px 6px; border-radius: 4px; }
+    .path-row-wrap:hover .add-to-cart, .path-row-wrap:hover .verify-btn, .path-row-wrap:hover .copy-btn { opacity: 1; }
+    .path-row-wrap .add-to-cart:hover, .path-row-wrap .verify-btn:hover, .path-row-wrap .copy-btn:hover { color: #4a7c59; background: #333; }
+    .tree-row .add-to-cart, .tree-row .verify-btn, .tree-row .copy-btn { opacity: 0; flex-shrink: 0; cursor: pointer; color: #888; padding: 2px 6px; border-radius: 4px; margin-left: 4px; }
+    .tree-row:hover .add-to-cart, .tree-row:hover .verify-btn, .tree-row:hover .copy-btn { opacity: 1; }
+    .tree-row .add-to-cart:hover, .tree-row .verify-btn:hover, .tree-row .copy-btn:hover { color: #4a7c59; background: #333; }
+    .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+    .toast { background: #2a2a2a; border: 1px solid #444; border-radius: 6px; padding: 10px 14px; font-size: 13px; color: #e0e0e0; box-shadow: 0 4px 12px rgba(0,0,0,0.4); max-width: 360px; animation: toast-in 0.2s ease; }
+    .toast.info { border-left: 4px solid #4a7c59; }
+    .toast.warn { border-left: 4px solid #c9a227; }
+    @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .cart-sidebar { width: 280px; flex-shrink: 0; background: #222; border-left: 1px solid #333; display: flex; flex-direction: column; height: 100vh; max-height: 100vh; overflow: hidden; }
+    .cart-sidebar.collapsed { width: 48px; }
+    .cart-sidebar.collapsed .cart-body, .cart-sidebar.collapsed .cart-footer { display: none; }
+    .cart-header { padding: 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #333; }
+    .cart-header .cart-title { font-weight: 600; }
+    .cart-toggle { background: none; border: none; color: #888; cursor: pointer; padding: 4px; }
+    .cart-body { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; }
+    .cart-item { padding: 6px 8px; font-size: 12px; font-family: ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 4px; display: flex; align-items: center; gap: 6px; }
+    .cart-item:hover { background: #2a2a2a; }
+    .cart-item .cart-item-remove, .cart-item .cart-item-copy { opacity: 0; flex-shrink: 0; cursor: pointer; color: #888; padding: 2px 4px; }
+    .cart-item:hover .cart-item-remove, .cart-item:hover .cart-item-copy { opacity: 1; }
+    .cart-item .cart-item-copy:hover { color: #4a7c59; }
+    .cart-footer { padding: 12px; border-top: 1px solid #333; display: flex; gap: 8px; flex-wrap: wrap; }
+    .cart-footer .tree-tool-btn { flex: 1; min-width: 80px; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; }
+    .modal-overlay.visible { display: flex; }
+    .modal-box { background: #252525; border: 1px solid #444; border-radius: 8px; max-width: 90vw; max-height: 80vh; display: flex; flex-direction: column; min-width: 400px; }
+    .modal-title { padding: 12px 16px; border-bottom: 1px solid #333; font-weight: 600; }
+    .modal-body { padding: 12px 16px; overflow-y: auto; max-height: 50vh; }
+    .modal-body .modal-paths { font-family: ui-monospace, monospace; font-size: 12px; list-style: none; margin: 0; padding: 0; }
+    .modal-body .modal-paths li { padding: 4px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+    .modal-body .modal-paths li .modal-path-copy { flex-shrink: 0; cursor: pointer; color: #888; padding: 2px 6px; border-radius: 4px; }
+    .modal-body .modal-paths li .modal-path-copy:hover { color: #4a7c59; background: #333; }
+    .modal-actions { padding: 12px 16px; border-top: 1px solid #333; display: flex; gap: 8px; justify-content: flex-end; }
+    .tree-scroll { overflow-y: auto; overflow-x: hidden; height: 70vh; position: relative; }
+    .tree-inner { position: relative; }
+    .tree-row { position: absolute; left: 0; right: 0; height: 28px; display: flex; align-items: center; padding: 0 8px; box-sizing: border-box; }
+    .tree-row:hover { background: #2a2a2a; }
+    .tree-row .tree-chevron { width: 20px; flex-shrink: 0; cursor: pointer; color: #888; user-select: none; display: inline-flex; align-items: center; justify-content: center; }
+    .tree-row .tree-chevron:hover { color: #fff; }
+    .tree-row .tree-chevron.empty { visibility: hidden; }
+    .tree-row .tree-content { flex: 1; min-width: 0; display: flex; align-items: center; }
+    .tree-row .tree-name { margin-right: 8px; }
+    .tree-row .tree-size { color: #888; font-size: 12px; flex-shrink: 0; }
+    .tree-folder-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 18px; padding: 0 6px; font-size: 11px; font-weight: 500; color: #888; background: #333; border-radius: 10px; margin-left: 6px; flex-shrink: 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #333; }
+    th { background: #2a2a2a; color: #aaa; font-weight: 500; }
+    .loading { color: #888; padding: 24px; }
+    .error { color: #c55; padding: 8px 0; }
+    .path-cell { max-width: 400px; overflow: hidden; text-overflow: ellipsis; }
+    .settings-form { display: flex; flex-direction: column; gap: 12px; max-width: 500px; }
+    .settings-form label { display: flex; flex-direction: column; gap: 4px; }
+    .settings-form input { padding: 8px 10px; border-radius: 4px; border: 1px solid #444; background: #2a2a2a; color: #e0e0e0; }
+    .settings-actions { display: flex; gap: 8px; margin-top: 8px; }
+    .top-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .top-bar .tabs { margin-bottom: 0; flex: 1; }
+    .top-bar-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .top-bar-right label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #aaa; cursor: pointer; }
+    .top-bar-right input[type="checkbox"] { cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+  <div class="app-main">
+  <div class="top-bar">
+    <div class="tabs">
+      <button class="tab active" data-tab="tree">Folder Tree</button>
+      <button class="tab" data-tab="dup-folders">Duplicate Folders</button>
+      <button class="tab" data-tab="dup-files">Duplicate Files</button>
+      <button class="tab" data-tab="large">Large Files</button>
+      <button class="tab" data-tab="large-folders">Large Folders</button>
+      <button class="tab" data-tab="report">Report</button>
+      <button class="tab" data-tab="settings">Settings</button>
+    </div>
+    <div class="top-bar-right">
+      <label><input type="checkbox" id="auto-update-toggle"> Auto update data</label>
+      <label><input type="checkbox" id="verify-recursive-toggle" checked> Verify recursively</label>
+      <button type="button" class="tree-tool-btn" id="manual-update-btn" style="display: none;">Update data</button>
+    </div>
+  </div>
+
+  <div id="panel-tree" class="panel active">
+    <div class="filter-row">
+      <label>Filter (include): <input type="text" id="tree-filter" placeholder="substring in path"></label>
+      <label>Exclude (comma): <input type="text" id="tree-exclude" placeholder="a, b, c"></label>
+      <label>Extension (comma): <input type="text" id="tree-extension" placeholder=".txt, .jpg, .pdf"></label>
+      <label>Size from (bytes): <input type="number" id="tree-size-min" placeholder="min" min="0" step="1"></label>
+      <label>Size to (bytes): <input type="number" id="tree-size-max" placeholder="max" min="0" step="1"></label>
+      <button type="button" class="tree-tool-btn" id="tree-size-btn">Filter by size</button>
+      <button type="button" class="tree-tool-btn" id="tree-expand-all">Expand all</button>
+      <button type="button" class="tree-tool-btn" id="tree-collapse-all">Collapse all</button>
+      <button type="button" class="tree-tool-btn" id="tree-add-all-to-cart">Add all files to cart</button>
+    </div>
+    <div id="tree-container"></div>
+  </div>
+
+  <div id="panel-dup-folders" class="panel">
+    <div id="dup-folders-container"></div>
+  </div>
+
+  <div id="panel-dup-files" class="panel">
+    <div id="dup-files-container"></div>
+  </div>
+
+  <div id="panel-large" class="panel">
+    <div id="large-container"></div>
+  </div>
+
+  <div id="panel-large-folders" class="panel">
+    <div id="large-folders-container"></div>
+  </div>
+
+  <div id="panel-report" class="panel">
+    <div id="report-container"></div>
+  </div>
+
+  <div id="panel-settings" class="panel">
+    <div class="settings-form">
+      <label>FROM (source path prefix):</label>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input type="text" id="config-from" placeholder="/Volumes/.../phn 29_5_16" style="flex:1;">
+        <button type="button" class="tree-tool-btn" id="browse-from">Browse...</button>
+      </div>
+      <label>TO (destination path prefix):</label>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input type="text" id="config-to" placeholder="/Users/.../Backup" style="flex:1;">
+        <button type="button" class="tree-tool-btn" id="browse-to">Browse...</button>
+      </div>
+      <div class="settings-actions">
+        <button type="button" class="tree-tool-btn" id="config-save">Save</button>
+        <button type="button" class="tree-tool-btn" id="config-cancel">Cancel</button>
+      </div>
+      <hr style="border-color:#333; margin: 16px 0;">
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="font-size:13px; color:#aaa;">Build database by scanning the FROM path on disk.</div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <button type="button" class="tree-tool-btn" id="build-db-btn">Build DB from FROM path</button>
+          <span id="build-db-status" style="font-size:13px; color:#888;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="error" class="error"></div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <aside id="cart-sidebar" class="cart-sidebar">
+    <div class="cart-header">
+      <span class="cart-title">Cart (<span id="cart-count">0</span>)</span>
+      <button type="button" class="cart-toggle" id="cart-toggle" title="Collapse/Expand">&#9664;</button>
+    </div>
+    <div class="cart-body">
+      <div id="cart-list"></div>
+    </div>
+    <div class="cart-footer">
+      <button type="button" class="tree-tool-btn" id="cart-clear">Clear</button>
+      <button type="button" class="tree-tool-btn" id="cart-delete">Delete</button>
+      <button type="button" class="tree-tool-btn" id="cart-sync">Sync</button>
+    </div>
+  </aside>
+  </div>
+
+  <div id="cart-confirm-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title" id="cart-modal-title">Confirm</div>
+      <div class="modal-body">
+        <p id="cart-modal-message"></p>
+        <ul class="modal-paths" id="cart-modal-paths"></ul>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="tree-tool-btn" id="cart-modal-cancel">Cancel</button>
+        <button type="button" class="tree-tool-btn" id="cart-modal-confirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+
+    let state = { files: [], folderSizes: new Map(), tree: null, onRefresh: null, savedConfig: { from: '', to: '' }, cart: [], autoUpdateData: false, verifyRecursive: true };
+
+    function debounce(fn, ms) {
+      let t = null;
+      return function () {
+        if (t) clearTimeout(t);
+        t = setTimeout(() => { t = null; fn(); }, ms);
+      };
+    }
+    const debouncedRender = debounce(renderAllPanels, 300);
+
+    function addToCart(pathStr) {
+      if (!pathStr || state.cart.includes(pathStr)) return;
+      state.cart.push(pathStr);
+      renderCart();
+    }
+    function removeFromCart(pathStr) {
+      state.cart = state.cart.filter(p => p !== pathStr);
+      renderCart();
+    }
+    let cartModalOnConfirm = null;
+
+    function showCartPathsModal(title, message, paths, onConfirm) {
+      cartModalOnConfirm = onConfirm;
+      document.getElementById('cart-modal-title').textContent = title;
+      document.getElementById('cart-modal-message').textContent = message;
+      const ul = document.getElementById('cart-modal-paths');
+      ul.innerHTML = '';
+      paths.forEach(p => {
+        const li = document.createElement('li');
+        const span = document.createElement('span');
+        span.style.flex = '1';
+        span.style.minWidth = '0';
+        span.style.overflow = 'hidden';
+        span.style.textOverflow = 'ellipsis';
+        span.textContent = p;
+        span.title = p;
+        li.appendChild(span);
+        const copyBtn = document.createElement('span');
+        copyBtn.className = 'modal-path-copy';
+        copyBtn.textContent = '\u2398';
+        copyBtn.title = 'Copy full path';
+        copyBtn.addEventListener('click', (e) => { e.stopPropagation(); copyPathToClipboard(p); });
+        li.appendChild(copyBtn);
+        ul.appendChild(li);
+      });
+      document.getElementById('cart-confirm-modal').classList.add('visible');
+    }
+
+    function hideCartPathsModal() {
+      document.getElementById('cart-confirm-modal').classList.remove('visible');
+      cartModalOnConfirm = null;
+    }
+
+    function copyPathToClipboard(pathStr) {
+      if (!pathStr) return;
+      navigator.clipboard.writeText(pathStr).then(() => {
+        showToast('Path copied to clipboard', 'info');
+      }).catch(() => showToast('Failed to copy', 'warn'));
+    }
+
+    function showToast(message, type) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const toast = document.createElement('div');
+      toast.className = 'toast ' + (type || 'info');
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.2s';
+        setTimeout(() => toast.remove(), 200);
+      }, 3500);
+    }
+
+    function renderCart() {
+      const list = document.getElementById('cart-list');
+      const countEl = document.getElementById('cart-count');
+      if (!list || !countEl) return;
+      countEl.textContent = String(state.cart.length);
+      list.innerHTML = '';
+      state.cart.forEach(p => {
+        const item = document.createElement('div');
+        item.className = 'cart-item';
+        item.title = p;
+        const span = document.createElement('span');
+        span.style.flex = '1';
+        span.style.minWidth = '0';
+        span.style.overflow = 'hidden';
+        span.style.textOverflow = 'ellipsis';
+        span.style.cursor = 'pointer';
+        span.textContent = p.split('/').pop() || p;
+        span.addEventListener('click', (e) => {
+          e.stopPropagation();
+          pathRowClick(p, () => { removeFromCart(p); refreshDataIfAuto(); });
+        });
+        item.appendChild(span);
+        const copyBtn = document.createElement('span');
+        copyBtn.className = 'cart-item-copy';
+        copyBtn.textContent = '\u2398';
+        copyBtn.title = 'Copy full path';
+        copyBtn.addEventListener('click', (e) => { e.stopPropagation(); copyPathToClipboard(p); });
+        item.appendChild(copyBtn);
+        const removeBtn = document.createElement('span');
+        removeBtn.className = 'cart-item-remove';
+        removeBtn.textContent = '\u00D7';
+        removeBtn.title = 'Remove from cart';
+        removeBtn.addEventListener('click', (e) => { e.stopPropagation(); removeFromCart(p); });
+        item.appendChild(removeBtn);
+        list.appendChild(item);
+      });
+    }
+
+    function parseCoreDB(text) {
+      return text.split('\n').map(line => {
+        const idx = line.indexOf(' | ');
+        if (idx < 0) return null;
+        const size = parseInt(line.slice(0, idx).trim(), 10);
+        const path = line.slice(idx + 3).trim();
+        return path ? { path, size: Number.isNaN(size) ? 0 : size } : null;
+      }).filter(Boolean);
+    }
+
+    function dirname(p) {
+      const i = p.lastIndexOf('/');
+      return i <= 0 ? '' : p.slice(0, i);
+    }
+
+    function computeFolderSizes(files) {
+      const map = new Map();
+      for (const f of files) {
+        let d = dirname(f.path);
+        while (d && d !== '/') {
+          map.set(d, (map.get(d) || 0) + f.size);
+          d = dirname(d);
+        }
+      }
+      return map;
+    }
+
+    function computeFolderFileCounts(files) {
+      const map = new Map();
+      for (const f of files) {
+        let d = dirname(f.path);
+        while (d && d !== '/') {
+          map.set(d, (map.get(d) || 0) + 1);
+          d = dirname(d);
+        }
+      }
+      return map;
+    }
+
+    function buildTree(files) {
+      const folderFileCounts = computeFolderFileCounts(files);
+      const root = { name: '', path: '', children: [], size: 0, isFile: false, fileCount: 0 };
+      const byPath = new Map();
+      byPath.set('', root);
+
+      function ensureFolder(pathSegments, fullPath) {
+        let key = '';
+        for (let i = 0; i < pathSegments.length; i++) {
+          const seg = pathSegments[i];
+          const nextKey = key ? key + '/' + seg : seg;
+          if (!byPath.has(nextKey)) {
+            const folderPath = '/' + nextKey;
+            const node = { name: seg, path: folderPath, children: [], size: state.folderSizes.get(folderPath) || 0, isFile: false, fileCount: folderFileCounts.get(folderPath) || 0 };
+            byPath.set(nextKey, node);
+            const parent = byPath.get(key);
+            if (parent) parent.children.push(node);
+          }
+          key = nextKey;
+        }
+        return key;
+      }
+
+      const seenFiles = new Set();
+      for (const f of files) {
+        const segs = f.path.split('/').filter(Boolean);
+        if (segs.length === 0) continue;
+        const fileKey = segs.join('/');
+        if (seenFiles.has(fileKey)) continue;
+        seenFiles.add(fileKey);
+        const parentSegs = segs.slice(0, -1);
+        const fileName = segs[segs.length - 1];
+        ensureFolder(parentSegs, f.path);
+        const parentKey = parentSegs.join('/');
+        const parent = byPath.get(parentKey);
+        if (parent) {
+          parent.children.push({ name: fileName, path: f.path, size: f.size, children: [], isFile: true });
+        }
+      }
+
+      function sortChildren(n) {
+        n.children.sort((a, b) => {
+          if (a.isFile && !b.isFile) return 1;
+          if (!a.isFile && b.isFile) return -1;
+          return (a.name || '').localeCompare(b.name || '');
+        });
+        n.children.forEach(sortChildren);
+      }
+      sortChildren(root);
+      return root;
+    }
+
+    function filterFiles(files, include, excludeList, extensionList) {
+      let out = files;
+      if (include && include.trim()) {
+        const sub = include.trim().toLowerCase();
+        out = out.filter(f => f.path.toLowerCase().includes(sub));
+      }
+      if (excludeList && excludeList.length) {
+        out = out.filter(f => !excludeList.some(ex => f.path.toLowerCase().includes(ex)));
+      }
+      if (extensionList && extensionList.length) {
+        out = out.filter(f => {
+          const name = f.path.split('/').pop() || '';
+          const dot = name.lastIndexOf('.');
+          const ext = dot > 0 ? name.slice(dot).toLowerCase() : '(no ext)';
+          return extensionList.some(e => {
+            const norm = e.startsWith('.') ? e.toLowerCase() : '.' + e.toLowerCase();
+            return ext === norm;
+          });
+        });
+      }
+      return out;
+    }
+
+    function filterFilesBySize(files) {
+      const minVal = document.getElementById('tree-size-min').value.trim();
+      const maxVal = document.getElementById('tree-size-max').value.trim();
+      const min = minVal === '' ? null : parseInt(minVal, 10);
+      const max = maxVal === '' ? null : parseInt(maxVal, 10);
+      if (min == null && max == null) return files;
+      return files.filter(f => {
+        if (min != null && !Number.isNaN(min) && f.size < min) return false;
+        if (max != null && !Number.isNaN(max) && f.size > max) return false;
+        return true;
+      });
+    }
+
+    function getExtensions(files) {
+      const map = new Map();
+      for (const f of files) {
+        const name = f.path.split('/').pop() || '';
+        const dot = name.lastIndexOf('.');
+        const ext = dot > 0 ? name.slice(dot).toLowerCase() : '(no ext)';
+        const cur = map.get(ext) || { count: 0, size: 0 };
+        cur.count++;
+        cur.size += f.size;
+        map.set(ext, cur);
+      }
+      return Array.from(map.entries()).map(([ext, v]) => ({ ext, ...v })).sort((a, b) => b.size - a.size);
+    }
+
+    function getDuplicateFiles(files) {
+      const byKey = new Map();
+      for (const f of files) {
+        const name = f.path.split('/').pop() || '';
+        const key = name + '\0' + f.size;
+        if (!byKey.has(key)) byKey.set(key, []);
+        byKey.get(key).push(f);
+      }
+      const groups = Array.from(byKey.values()).filter(arr => arr.length > 1);
+      groups.sort((a, b) => b[0].size - a[0].size);
+      return groups;
+    }
+
+    function getDuplicateFolders(files, folderSizes) {
+      const byNameSize = new Map();
+      folderSizes.forEach((size, path) => {
+        const name = path.split('/').pop() || path || '/';
+        const key = name + '\0' + size;
+        if (!byNameSize.has(key)) byNameSize.set(key, []);
+        byNameSize.get(key).push({ path, size });
+      });
+      const groups = Array.from(byNameSize.values()).filter(arr => arr.length > 1);
+      groups.sort((a, b) => b[0].size - a[0].size);
+      return groups;
+    }
+
+    function getPathDisplaySuffixes(paths) {
+      if (paths.length === 0) return [];
+      const segsList = paths.map(p => p.split('/').filter(Boolean));
+      let n = segsList[0].length;
+      for (let i = 1; i < segsList.length; i++) {
+        const segs = segsList[i];
+        let j = 0;
+        while (j < n && j < segs.length && segsList[0][j] === segs[j]) j++;
+        n = j;
+      }
+      return segsList.map(segs => '/' + segs.slice(n).join('/'));
+    }
+
+    const TREE_ROW_HEIGHT = 28;
+
+    function createPathRow(pathStr, sizeLabel, onRemoved, displayLabel, fileCount) {
+      const wrap = document.createElement('div');
+      wrap.className = 'path-row-wrap';
+      wrap.title = pathStr;
+      const text = document.createElement('span');
+      text.className = 'path-row-text';
+      text.textContent = (sizeLabel != null ? sizeLabel + '  ' : '') + (displayLabel != null ? displayLabel : pathStr);
+      wrap.appendChild(text);
+      if (fileCount != null && fileCount > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'tree-folder-badge';
+        badge.textContent = String(fileCount);
+        badge.title = fileCount + ' file(s) in folder and subfolders';
+        wrap.appendChild(badge);
+      }
+      const copyBtn = document.createElement('span');
+      copyBtn.className = 'copy-btn';
+      copyBtn.title = 'Copy full path';
+      copyBtn.textContent = '\u2398';
+      copyBtn.addEventListener('click', (e) => { e.stopPropagation(); copyPathToClipboard(pathStr); });
+      wrap.appendChild(copyBtn);
+      const verifyBtn = document.createElement('span');
+      verifyBtn.className = 'verify-btn';
+      verifyBtn.title = 'Verify recursively and remove missing from DB';
+      verifyBtn.textContent = 'Verify';
+      verifyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fetch('/api/verify-path-recursive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: pathStr, recursive: state.verifyRecursive }) })
+          .then(r => r.json())
+          .then(data => {
+            if (data.error) throw new Error(data.error);
+            const msg = 'Verified: ' + data.verified + ' found, ' + data.removed + ' removed from DB';
+            showToast(msg, data.removed ? 'warn' : 'info');
+            refreshDataIfAuto();
+          })
+          .catch(err => showToast('Verify failed: ' + (err.message || err), 'warn'));
+      });
+      wrap.appendChild(verifyBtn);
+      const addBtn = document.createElement('span');
+      addBtn.className = 'add-to-cart';
+      addBtn.title = 'Add to cart';
+      addBtn.textContent = '+';
+      addBtn.addEventListener('click', (e) => { e.stopPropagation(); addToCart(pathStr); });
+      wrap.appendChild(addBtn);
+      wrap.addEventListener('click', (e) => {
+        if (e.target === addBtn || e.target === verifyBtn || e.target === copyBtn) return;
+        e.stopPropagation();
+        pathRowClick(pathStr, onRemoved);
+      });
+      return wrap;
+    }
+
+    function pathRowClick(pathStr, onRemoved) {
+      fetch('/api/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: pathStr }) })
+        .then(r => r.json())
+        .then(data => {
+          if (data.exists) {
+            return fetch('/api/open?path=' + encodeURIComponent(pathStr)).then(r => r.ok ? null : r.text()).then(err => { if (err) alert(err); });
+          }
+          return fetch('/api/remove-paths', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [pathStr] }) })
+            .then(r => r && r.json())
+            .then(() => {
+              showToast('Path removed from DB (not found on disk)', 'warn');
+              if (onRemoved) onRemoved();
+            });
+        });
+    }
+
+    function refreshDataIfAuto() {
+      if (state.autoUpdateData) refreshData();
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    function formatSize(n) {
+      if (n >= 1e9) return (n / 1e9).toFixed(2) + ' GB';
+      if (n >= 1e6) return (n / 1e6).toFixed(2) + ' MB';
+      if (n >= 1e3) return (n / 1e3).toFixed(2) + ' KB';
+      return n + ' B';
+    }
+
+    let treeExpanded = new Set(['']);
+    let treeFlatList = [];
+    let treeScrollEl = null;
+    let treeInnerEl = null;
+    let treeSlotCount = 0;
+    const TREE_OVERSCAN = 5;
+
+    function flattenTree(node, expanded, depth, out) {
+      if (!node) return;
+      if (node.path !== undefined && node.name !== undefined) {
+        if (node.path !== '' || node.name !== '') out.push({ node, depth });
+        const isFolder = !node.isFile && (node.children || []).length > 0;
+        if (isFolder && expanded.has(node.path)) {
+          (node.children || []).forEach(c => flattenTree(c, expanded, depth + 1, out));
+        }
+      } else {
+        (node.children || []).forEach(c => flattenTree(c, expanded, depth, out));
+      }
+    }
+
+    function toggleTreeExpanded(path) {
+      if (treeExpanded.has(path)) treeExpanded.delete(path);
+      else treeExpanded.add(path);
+      renderTreePanel();
+    }
+
+    function collectFolderPaths(node, out) {
+      if (!node) return;
+      const isFolder = !node.isFile && (node.children || []).length > 0;
+      if (isFolder && node.path) out.push(node.path);
+      (node.children || []).forEach(c => collectFolderPaths(c, out));
+    }
+
+    function getFilterParams() {
+      const filterInclude = document.getElementById('tree-filter').value;
+      const excludeStr = document.getElementById('tree-exclude').value;
+      const exclude = excludeStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      const extStr = document.getElementById('tree-extension').value;
+      const extensions = extStr.split(',').map(s => s.trim()).filter(Boolean);
+      return { filterInclude, exclude, extensions };
+    }
+
+    function expandAllTree() {
+      const { filterInclude, exclude, extensions } = getFilterParams();
+      let filteredFiles = state.files;
+      if (filterInclude || exclude.length || extensions.length) filteredFiles = filterFiles(state.files, filterInclude, exclude, extensions);
+      filteredFiles = filterFilesBySize(filteredFiles);
+      const treeRoot = filteredFiles.length ? buildTree(filteredFiles) : { name: '', path: '', children: [], size: 0 };
+      const paths = [];
+      collectFolderPaths(treeRoot, paths);
+      treeExpanded = new Set(['', ...paths]);
+      renderTreePanel();
+    }
+
+    function collapseAllTree() {
+      treeExpanded = new Set(['']);
+      renderTreePanel();
+    }
+
+    function collectAllTreePaths(node, out, filesOnly) {
+      if (!node) return;
+      if (node.path && (!filesOnly || node.isFile)) out.push(node.path);
+      (node.children || []).forEach(c => collectAllTreePaths(c, out, filesOnly));
+    }
+
+    function getFilteredTreePaths() {
+      const { filterInclude, exclude, extensions } = getFilterParams();
+      let filteredFiles = state.files;
+      if (filterInclude || exclude.length || extensions.length) filteredFiles = filterFiles(state.files, filterInclude, exclude, extensions);
+      filteredFiles = filterFilesBySize(filteredFiles);
+      const treeRoot = filteredFiles.length ? buildTree(filteredFiles) : { name: '', path: '', children: [], size: 0 };
+      const paths = [];
+      collectAllTreePaths(treeRoot, paths, true);
+      return paths;
+    }
+
+    function buildTreeRowContent(item) {
+      const { node, depth } = item;
+      const isFolder = !node.isFile && (node.children || []).length > 0;
+      const row = document.createElement('div');
+      row.className = 'tree-row';
+      row.style.paddingLeft = (12 + depth * 16) + 'px';
+
+      const chevron = document.createElement('span');
+      chevron.className = 'tree-chevron' + (isFolder ? '' : ' empty');
+      chevron.textContent = isFolder ? (treeExpanded.has(node.path) ? '\u25BC' : '\u25B6') : '';
+      if (isFolder) {
+        chevron.onclick = e => { e.stopPropagation(); toggleTreeExpanded(node.path); };
+      }
+
+      const content = document.createElement('div');
+      content.className = 'tree-content';
+      const pathRow = createPathRow(node.path, formatSize(node.size), refreshDataIfAuto, node.name, !node.isFile ? node.fileCount : undefined);
+      content.appendChild(pathRow);
+
+      row.appendChild(chevron);
+      row.appendChild(content);
+      return row;
+    }
+
+    function renderTreePanel() {
+      const { filterInclude, exclude, extensions } = getFilterParams();
+      let filteredFiles = state.files;
+      if (filterInclude || exclude.length || extensions.length) filteredFiles = filterFiles(state.files, filterInclude, exclude, extensions);
+      filteredFiles = filterFilesBySize(filteredFiles);
+      const treeRoot = filteredFiles.length ? buildTree(filteredFiles) : { name: '', path: '', children: [], size: 0 };
+
+      treeFlatList = [];
+      flattenTree(treeRoot, treeExpanded, 0, treeFlatList);
+
+      const treeContainer = document.getElementById('tree-container');
+      treeContainer.innerHTML = '';
+
+      if (!state.files.length) {
+        const empty = document.createElement('div');
+        empty.style.cssText = 'padding:40px 16px; text-align:center; color:#888; line-height:1.8;';
+        empty.innerHTML = 'No data loaded. Go to <a href="#" id="empty-goto-settings" style="color:#4a7c59; text-decoration:none; font-weight:600;">Settings</a>, select a <strong style="color:#ccc;">FROM</strong> folder, then click <strong style="color:#ccc;">Build DB from FROM path</strong>.';
+        treeContainer.appendChild(empty);
+        document.getElementById('empty-goto-settings').addEventListener('click', (e) => {
+          e.preventDefault();
+          document.querySelector('.tab[data-tab="settings"]').click();
+        });
+        return;
+      }
+
+      const scrollEl = document.createElement('div');
+      scrollEl.className = 'tree-scroll';
+      treeScrollEl = scrollEl;
+
+      const totalHeight = treeFlatList.length * TREE_ROW_HEIGHT;
+      const inner = document.createElement('div');
+      inner.className = 'tree-inner';
+      inner.style.height = totalHeight + 'px';
+      treeInnerEl = inner;
+
+      const visibleCount = Math.ceil((scrollEl.clientHeight || 400) / TREE_ROW_HEIGHT) + TREE_OVERSCAN * 2;
+      const slotCount = Math.min(treeFlatList.length, Math.max(1, visibleCount));
+      treeSlotCount = slotCount;
+
+      const slots = [];
+      for (let i = 0; i < slotCount; i++) {
+        const slot = document.createElement('div');
+        slot.className = 'tree-row-slot';
+        slot.style.position = 'absolute';
+        slot.style.left = '0';
+        slot.style.right = '0';
+        slot.style.height = TREE_ROW_HEIGHT + 'px';
+        slot.dataset.slotIndex = String(i);
+        slots.push(slot);
+        inner.appendChild(slot);
+      }
+
+      function fillSlot(slot, rowIndex) {
+        if (rowIndex < 0 || rowIndex >= treeFlatList.length) return;
+        const item = treeFlatList[rowIndex];
+        slot.appendChild(buildTreeRowContent(item));
+      }
+
+      function updateSlotPositions() {
+        const scrollTop = scrollEl.scrollTop || 0;
+        const start = Math.max(0, Math.floor(scrollTop / TREE_ROW_HEIGHT) - TREE_OVERSCAN);
+        for (let i = 0; i < slotCount; i++) {
+          const rowIndex = start + i;
+          const slot = slots[i];
+          slot.style.top = (rowIndex * TREE_ROW_HEIGHT) + 'px';
+          slot.dataset.rowIndex = String(rowIndex);
+          slot.innerHTML = '';
+          fillSlot(slot, rowIndex);
+        }
+      }
+
+      const io = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          const slot = e.target;
+          const rowIndex = parseInt(slot.dataset.rowIndex, 10);
+          if (slot.children.length > 0) continue;
+          fillSlot(slot, rowIndex);
+        }
+      }, { root: scrollEl, rootMargin: '80px', threshold: 0 });
+
+      scrollEl.addEventListener('scroll', () => {
+        const scrollTop = scrollEl.scrollTop || 0;
+        const start = Math.max(0, Math.floor(scrollTop / TREE_ROW_HEIGHT) - TREE_OVERSCAN);
+        for (let i = 0; i < slotCount; i++) {
+          const rowIndex = start + i;
+          const slot = slots[i];
+          slot.style.top = (rowIndex * TREE_ROW_HEIGHT) + 'px';
+          slot.dataset.rowIndex = String(rowIndex);
+          slot.innerHTML = '';
+          fillSlot(slot, rowIndex);
+        }
+      });
+
+      scrollEl.appendChild(inner);
+      treeContainer.appendChild(scrollEl);
+
+      updateSlotPositions();
+    }
+
+    function refreshData() {
+      document.getElementById('error').textContent = '';
+      fetch('/api/data')
+        .then(r => r.text())
+        .then(text => {
+          state.files = parseCoreDB(text);
+          state.folderSizes = computeFolderSizes(state.files);
+          state.tree = buildTree(state.files);
+          renderAllPanels();
+        })
+        .catch(err => { document.getElementById('error').textContent = 'Failed to load: ' + err.message; });
+    }
+
+    function renderAllPanels() {
+      const { filterInclude, exclude, extensions } = getFilterParams();
+      let filteredFiles = state.files;
+      if (filterInclude || exclude.length || extensions.length) filteredFiles = filterFiles(state.files, filterInclude, exclude, extensions);
+      filteredFiles = filterFilesBySize(filteredFiles);
+      const treeRoot = filteredFiles.length ? buildTree(filteredFiles) : { name: '', path: '', children: [], size: 0 };
+      if (state.files.length && filteredFiles.length < state.files.length) {
+        treeRoot.children = treeRoot.children || [];
+        treeRoot.size = filteredFiles.reduce((s, f) => s + f.size, 0);
+      }
+
+      renderTreePanel();
+
+      const dupFolders = getDuplicateFolders(state.files, state.folderSizes);
+      const dupFoldersEl = document.getElementById('dup-folders-container');
+      dupFoldersEl.innerHTML = '';
+      const table1 = document.createElement('table');
+      table1.innerHTML = '<thead><tr><th>Folder name</th><th>Size</th><th>Paths</th></tr></thead><tbody></tbody>';
+      dupFolders.forEach(group => {
+        const paths = group.map(g => g.path);
+        const suffixes = getPathDisplaySuffixes(paths);
+        const name = group[0].path.split('/').pop() || group[0].path;
+        const size = formatSize(group[0].size);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${escapeHtml(name)}</td><td>${size}</td><td></td>`;
+        const pathTd = tr.querySelector('td:last-child');
+        group.forEach((g, i) => {
+          pathTd.appendChild(createPathRow(g.path, null, refreshDataIfAuto, suffixes[i]));
+        });
+        table1.querySelector('tbody').appendChild(tr);
+      });
+      dupFoldersEl.appendChild(table1);
+
+      const dupFiles = getDuplicateFiles(state.files);
+      const dupFilesEl = document.getElementById('dup-files-container');
+      dupFilesEl.innerHTML = '';
+      const table2 = document.createElement('table');
+      table2.innerHTML = '<thead><tr><th>File name</th><th>Size</th><th>Count</th><th>Paths</th></tr></thead><tbody></tbody>';
+      dupFiles.forEach(group => {
+        const paths = group.map(g => g.path);
+        const suffixes = getPathDisplaySuffixes(paths);
+        const name = group[0].path.split('/').pop() || '';
+        const size = formatSize(group[0].size);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${escapeHtml(name)}</td><td>${size}</td><td>${group.length}</td><td></td>`;
+        const pathTd = tr.querySelector('td:last-child');
+        group.forEach((g, i) => { pathTd.appendChild(createPathRow(g.path, null, refreshDataIfAuto, suffixes[i])); });
+        table2.querySelector('tbody').appendChild(tr);
+      });
+      dupFilesEl.appendChild(table2);
+
+      const large = [...state.files].sort((a, b) => b.size - a.size).slice(0, 50);
+      const largeEl = document.getElementById('large-container');
+      largeEl.innerHTML = '';
+      const table3 = document.createElement('table');
+      table3.innerHTML = '<thead><tr><th>Size</th><th>Path</th></tr></thead><tbody></tbody>';
+      large.forEach(f => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${formatSize(f.size)}</td><td></td>`;
+        tr.querySelector('td:last-child').appendChild(createPathRow(f.path, null, refreshDataIfAuto));
+        table3.querySelector('tbody').appendChild(tr);
+      });
+      largeEl.appendChild(table3);
+
+      const largeFolders = Array.from(state.folderSizes.entries())
+        .map(([path, size]) => ({ path, size }))
+        .sort((a, b) => b.size - a.size)
+        .slice(0, 50);
+      const largeFoldersEl = document.getElementById('large-folders-container');
+      largeFoldersEl.innerHTML = '';
+      const table3b = document.createElement('table');
+      table3b.innerHTML = '<thead><tr><th>Size</th><th>Path</th></tr></thead><tbody></tbody>';
+      largeFolders.forEach(({ path, size }) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${formatSize(size)}</td><td></td>`;
+        tr.querySelector('td:last-child').appendChild(createPathRow(path, null, refreshDataIfAuto));
+        table3b.querySelector('tbody').appendChild(tr);
+      });
+      largeFoldersEl.appendChild(table3b);
+
+      const report = getExtensions(state.files);
+      const totalSize = state.files.reduce((s, f) => s + f.size, 0);
+      const reportEl = document.getElementById('report-container');
+      reportEl.innerHTML = '';
+      const table4 = document.createElement('table');
+      table4.innerHTML = '<thead><tr><th>Extension</th><th>Count</th><th>Size</th><th>%</th></tr></thead><tbody></tbody>';
+      report.forEach(r => {
+        const pct = totalSize ? (100 * r.size / totalSize).toFixed(2) : '0';
+        const tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+        tr.innerHTML = `<td>${escapeHtml(r.ext)}</td><td>${r.count}</td><td>${formatSize(r.size)}</td><td>${pct}%</td>`;
+        tr.addEventListener('click', () => {
+          document.getElementById('tree-filter').value = r.ext;
+          document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+          document.querySelector('.tab[data-tab="tree"]').classList.add('active');
+          document.getElementById('panel-tree').classList.add('active');
+          renderAllPanels();
+        });
+        table4.querySelector('tbody').appendChild(tr);
+      });
+      reportEl.appendChild(table4);
+    }
+
+    document.querySelectorAll('.tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+      });
+    });
+
+    document.getElementById('tree-filter').addEventListener('input', debouncedRender);
+    document.getElementById('tree-exclude').addEventListener('input', debouncedRender);
+    document.getElementById('tree-extension').addEventListener('input', debouncedRender);
+    document.getElementById('tree-size-min').addEventListener('input', debouncedRender);
+    document.getElementById('tree-size-max').addEventListener('input', debouncedRender);
+    document.getElementById('tree-size-btn').addEventListener('click', () => renderAllPanels());
+    document.getElementById('tree-expand-all').addEventListener('click', expandAllTree);
+    document.getElementById('tree-collapse-all').addEventListener('click', collapseAllTree);
+    document.getElementById('tree-add-all-to-cart').addEventListener('click', () => {
+      const paths = getFilteredTreePaths();
+      paths.forEach(p => { if (p && !state.cart.includes(p)) state.cart.push(p); });
+      renderCart();
+    });
+
+    document.getElementById('cart-modal-cancel').addEventListener('click', hideCartPathsModal);
+    document.getElementById('cart-modal-confirm').addEventListener('click', () => {
+      if (cartModalOnConfirm) cartModalOnConfirm();
+      hideCartPathsModal();
+    });
+    document.getElementById('cart-confirm-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'cart-confirm-modal') hideCartPathsModal();
+    });
+
+    document.getElementById('auto-update-toggle').addEventListener('change', (e) => {
+      state.autoUpdateData = !!e.target.checked;
+      document.getElementById('manual-update-btn').style.display = state.autoUpdateData ? 'none' : '';
+    });
+    document.getElementById('verify-recursive-toggle').addEventListener('change', (e) => {
+      state.verifyRecursive = !!e.target.checked;
+    });
+    document.getElementById('manual-update-btn').addEventListener('click', () => refreshData());
+    document.getElementById('manual-update-btn').style.display = state.autoUpdateData ? 'none' : '';
+
+    document.getElementById('cart-clear').addEventListener('click', () => {
+      if (state.cart.length === 0) { alert('Cart is empty.'); return; }
+      state.cart = [];
+      renderCart();
+    });
+
+    document.getElementById('cart-toggle').addEventListener('click', () => {
+      const sidebar = document.getElementById('cart-sidebar');
+      sidebar.classList.toggle('collapsed');
+      document.getElementById('cart-toggle').textContent = sidebar.classList.contains('collapsed') ? '\u25B6' : '\u9664';
+    });
+    document.getElementById('cart-delete').addEventListener('click', () => {
+      if (state.cart.length === 0) { alert('Cart is empty.'); return; }
+      showCartPathsModal('Delete', 'Delete these ' + state.cart.length + ' item(s) from disk and coreDB?', state.cart.slice(), () => {
+        fetch('/api/delete-paths', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: state.cart }) })
+          .then(r => r.json())
+          .then(data => {
+            if (data.error) throw new Error(data.error);
+            state.cart = [];
+            renderCart();
+            refreshDataIfAuto();
+            alert('Deleted.');
+          })
+          .catch(err => alert('Delete failed: ' + (err.message || err)));
+      });
+    });
+    document.getElementById('cart-sync').addEventListener('click', () => {
+      if (state.cart.length === 0) { alert('Cart is empty.'); return; }
+      showCartPathsModal('Sync', 'Sync these ' + state.cart.length + ' item(s) to destination?', state.cart.slice(), () => {
+        fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: state.cart }) })
+          .then(r => r.json())
+          .then(data => {
+            if (data.error) throw new Error(data.error);
+            state.cart = [];
+            renderCart();
+            if (data.failed && data.failed.length) alert('Sync completed with errors. See sync-errors file on server.');
+            else alert('Sync completed.');
+          })
+          .catch(err => alert('Sync failed: ' + (err.message || err)));
+      });
+    });
+
+    state.onRefresh = refreshDataIfAuto;
+
+    function loadConfig() {
+      fetch('/api/config').then(r => r.json()).then(c => {
+        document.getElementById('config-from').value = c.from || '';
+        document.getElementById('config-to').value = c.to || '';
+        state.savedConfig = { from: c.from || '', to: c.to || '' };
+      }).catch(() => { state.savedConfig = { from: '', to: '' }; });
+    }
+    document.getElementById('config-save').addEventListener('click', () => {
+      const from = document.getElementById('config-from').value.trim();
+      const to = document.getElementById('config-to').value.trim();
+      fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from, to }) })
+        .then(r => r.json())
+        .then(c => {
+          state.savedConfig = { from: c.from || '', to: c.to || '' };
+          alert('Config saved.');
+        })
+        .catch(() => alert('Failed to save config.'));
+    });
+    function pickFolder(targetInputId, prompt) {
+      fetch('/api/pick-folder?prompt=' + encodeURIComponent(prompt))
+        .then(r => r.json())
+        .then(data => {
+          if (data.cancelled || !data.path) return;
+          document.getElementById(targetInputId).value = data.path;
+          const from = document.getElementById('config-from').value.trim();
+          const to = document.getElementById('config-to').value.trim();
+          fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from, to }) })
+            .then(r => r.json())
+            .then(c => {
+              state.savedConfig = { from: c.from || '', to: c.to || '' };
+              showToast('Config saved', 'info');
+            })
+            .catch(() => showToast('Failed to save config', 'warn'));
+        })
+        .catch(() => showToast('Folder picker failed', 'warn'));
+    }
+
+    document.getElementById('browse-from').addEventListener('click', () => pickFolder('config-from', 'Select FROM (source) folder'));
+    document.getElementById('browse-to').addEventListener('click', () => pickFolder('config-to', 'Select TO (destination) folder'));
+
+    document.getElementById('config-cancel').addEventListener('click', () => {
+      if (state.savedConfig) {
+        document.getElementById('config-from').value = state.savedConfig.from;
+        document.getElementById('config-to').value = state.savedConfig.to;
+      }
+    });
+
+    document.getElementById('build-db-btn').addEventListener('click', () => {
+      const btn = document.getElementById('build-db-btn');
+      const status = document.getElementById('build-db-status');
+      const fromVal = document.getElementById('config-from').value.trim();
+      if (!fromVal) {
+        status.style.color = '#c55';
+        status.textContent = 'Set and save a FROM path first.';
+        return;
+      }
+      btn.disabled = true;
+      status.style.color = '#888';
+      status.textContent = 'Scanning... (this may take a while for large drives)';
+      fetch('/api/build-db', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          btn.disabled = false;
+          if (data.ok) {
+            status.style.color = '#4a7c59';
+            status.textContent = 'Done. ' + data.count.toLocaleString() + ' files indexed.';
+            refreshData();
+          } else {
+            status.style.color = '#c55';
+            status.textContent = data.error || 'Failed.';
+          }
+        })
+        .catch(() => {
+          btn.disabled = false;
+          status.style.color = '#c55';
+          status.textContent = 'Request failed.';
+        });
+    });
+
+    loadConfig();
+    refreshData();
+  </script>
+</body>
+</html>
